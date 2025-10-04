@@ -1,0 +1,571 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FIREPY - Music Player</title>
+  <link rel="stylesheet" href="{% static 'backend/css/top.css' %}">
+  <link rel="shortcut icon" href="{% static 'backend/images/firepy.jpeg' %}" type="image/x-icon">
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-content">
+      <button class="back-btn">← Back</button>
+      <div class="header-title">FIREPY - ARIJIT</div>
+    </div>
+  </div>
+
+  <!-- Popular Songs Section -->
+  <div class="popular-section">
+    <h2 class="section-title">Popular Songs</h2>
+  </div>
+
+  <div id="songsList" class="songs-list"></div>
+
+  <!-- Bottom mini player -->
+  <div id="bottomPlayer" class="bottom-player">
+    <img id="bottomSongImg" src="" alt="cover">
+    <div class="bottom-info">
+      <div id="bottomSongTitle" class="title"></div>
+      <div id="bottomSongArtist" class="artist"></div>
+    </div>
+    <div class="bottom-controls">
+      <button id="prevBtn">⏮</button>
+      <button id="playPauseBtn">▶</button>
+      <button id="nextBtn">⏭</button>
+    </div>
+  </div>
+
+  <!-- Full Player -->
+  <div id="fullPlayer" class="full-player">
+    <button id="closeFull" class="close-btn">⬇</button>
+    
+    <div class="playlist-info">
+      <div class="playlist-label">PLAYING FROM Arjit</div>
+    </div>
+    
+    <img id="fullSongImg" class="cover-img" src="" alt="cover">
+    
+    <div class="song-details">
+      <h2 id="fullSongTitle"></h2>
+      <p id="fullSongArtist"></p>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-container" id="progressContainer">
+      <span id="currentTime" class="progress-time">0:00</span>
+      <div class="progress-bar-bg" id="progressBarBg">
+        <div id="fullProgressBar" class="progress-bar">
+          <div class="progress-handle" id="progressHandle"></div>
+        </div>
+      </div>
+      <span id="totalTime" class="progress-time">0:00</span>
+    </div>
+
+    <!-- Forward/Backward Controls -->
+    <div class="forward-backward-controls">
+      <button id="backward5Btn" class="ctrl-btn">◀ 5s</button>
+      <button id="forward5Btn" class="ctrl-btn">5s ▶</button>
+    </div>
+
+    <!-- Main Controls -->
+    <div class="main-controls">
+      <button id="fullPrevBtn" class="ctrl-btn">⏮</button>
+      <button id="fullPlayPauseBtn" class="play-btn">▶</button>
+      <button id="fullNextBtn" class="ctrl-btn">⏭</button>
+    </div>
+  </div>
+
+  <audio id="audioPlayer"></audio>
+  <script>
+// Song data with working demo audio URLs
+const songs = [
+  {
+        id: 1,
+        title: "Chaleya",
+        artist: "Arijit Singh",
+        src: "/media/songs/Chaleya.mp3",
+        img: "/media/images/Chaleya.jpg"
+      },
+      {
+        id: 2,
+        title: "Aasa Kooda",
+        artist: "Sai Abhyankkar, Sai Smriti",
+        src: "/media/songs/Aasa Kooda.mp3",
+        img: "/media/images/Aasa_Kooda.jpeg"
+      },
+      {
+        id: 3,
+        title: "Hukum",
+        artist: "Anirudh Ravichander",
+        src: "/media/songs/Hukum.mp3",
+        img: "/media/images/Hukum.webp"
+      },
+      {
+        id: 4,
+        title: "Heat Waves",
+        artist: "Glass Animals",
+        src: "/media/songs/Heat_Waves_Glass_Animals.mp3",
+        img: "/media/images/Heat_Waves_Glass_Animals.jpeg"
+      },
+      {
+        id: 5,
+        title: "Sweater Weather",
+        artist: "The Neighbourhood",
+        src: "/media/songs/Sweater Weather.mp3",
+        img: "/media/images/Sweater Weather.jpeg"
+      },
+      {
+        id: 6,
+        title: "Ghungroo",
+        artist: "Arijit Singh",
+        src: "/media/songs/Ghungroo.mp3",
+        img: "/media/images/Ghungroo.jpeg"
+      },
+      {
+        id: 7,
+        title: "Pehle Bhi Main",
+        artist: "Vishal Mishra",
+        src: "/media/songs/PEHLE BHI.mp3",
+        img: "/media/images/PEHLE BHI MAIN.jpeg"
+      },
+      {
+        id: 8,
+        title: "Satranga",
+        artist: "Arijit Singh",
+        src: "/media/songs/Satranga.mp3",
+        img: "/media/images/Satranga.jpg"
+      },
+      {
+        id: 9,
+        title: "Akhiyaan Gulaab",
+        artist: "Mitraz",
+        src: "/media/songs/Akhiyaan Gulaab.mp3",
+        img: "/media/images/Akhiyaan Gulaab.jpeg"
+      },
+      {
+        id: 10,
+        title: "Tum Kya Mile",
+        artist: "Arijit Singh, Shreya Ghoshal",
+        src: "/media/songs/Tum Kya Mile.mp3",
+        img: "/media/images/Tum Kya Mile.jpeg"
+      },
+      {
+        id: 11,
+        title: "Tauba Tauba",
+        artist: "Karan Aujla",
+        src: "/media/songs/Tauba Tauba.mp3",
+        img: "/media/images/Tauba Tauba.jpeg"
+      }
+];
+
+// Global variables
+let currentIndex = 0;
+let isPlaying = false;
+
+// DOM elements
+const songsList = document.getElementById("songsList");
+const bottomPlayer = document.getElementById("bottomPlayer");
+const playPauseBtn = document.getElementById("playPauseBtn");
+const bottomSongTitle = document.getElementById("bottomSongTitle");
+const bottomSongArtist = document.getElementById("bottomSongArtist");
+const bottomSongImg = document.getElementById("bottomSongImg");
+const audio = document.getElementById("audioPlayer");
+const fullPlayer = document.getElementById("fullPlayer");
+const closeFull = document.getElementById("closeFull");
+const fullSongImg = document.getElementById("fullSongImg");
+const fullSongTitle = document.getElementById("fullSongTitle");
+const fullSongArtist = document.getElementById("fullSongArtist");
+const fullPlayPauseBtn = document.getElementById("fullPlayPauseBtn");
+const fullProgressBar = document.getElementById("fullProgressBar");
+const currentTimeEl = document.getElementById("currentTime");
+const totalTimeEl = document.getElementById("totalTime");
+const progressContainer = document.getElementById("progressContainer");
+const progressBarBg = document.getElementById("progressBarBg");
+const progressHandle = document.getElementById("progressHandle");
+
+// Drag functionality variables
+let isDragging = false;
+let wasPlaying = false;
+
+// Functions
+function renderSongs() {
+  songsList.innerHTML = songs.map((song, index) => {
+    let statusClass = '';
+    if (index === currentIndex) {
+      statusClass = 'active';
+      if (isPlaying) {
+        statusClass += ' playing';
+      } else if (audio.src) {
+        statusClass += ' paused';
+      }
+    }
+    
+    return `
+    <div class="song-item ${statusClass}" data-id="${song.id}" style="animation-delay: ${index * 0.1}s">
+      <img src="${song.img}" class="song-thumb" alt="${song.title}">
+      <div class="song-info">
+        <div class="song-title">${song.title}</div>
+        <div class="song-artist">${song.artist}</div>
+      </div>
+      <div class="music-lines">
+        <div class="music-line"></div>
+        <div class="music-line"></div>
+        <div class="music-line"></div>
+        <div class="music-line"></div>
+        <div class="music-line"></div>
+      </div>
+    </div>
+  `}).join("");
+}
+
+function playSong(index) {
+  currentIndex = index;
+  const song = songs[currentIndex];
+  audio.src = encodeURI(song.src);
+  
+  audio.play().then(() => {
+    isPlaying = true;
+    updateUI();
+    renderSongs();
+  }).catch(e => {
+    console.log('Playback failed:', e);
+    isPlaying = false;
+    updateUI();
+    renderSongs();
+  });
+
+  // Show progress handle when song is loaded
+  progressHandle.classList.add("visible");
+
+  // Update bottom player (no arrow)
+  bottomSongTitle.textContent = song.title;
+  bottomSongArtist.textContent = song.artist;
+  bottomSongImg.src = song.img;
+  bottomPlayer.classList.add("show");
+
+  // Update full player (with arrow)
+  fullSongTitle.innerHTML = `<span style="color: gray; margin-right: 8px;font-size:32px;">⇛</span>${song.title}`;
+  fullSongArtist.textContent = song.artist;
+  fullSongImg.src = song.img;
+}
+
+function togglePlay() {
+  if (audio.src === '') {
+    // If no song is loaded, play the first song
+    playSong(0);
+    return;
+  }
+
+  if (isPlaying) {
+    audio.pause();
+    isPlaying = false;
+  } else {
+    audio.play().then(() => {
+      isPlaying = true;
+    }).catch(e => {
+      console.log('Playback failed:', e);
+      isPlaying = false;
+    });
+  }
+  
+  // Keep handle visible regardless of play/pause state
+  if (audio.src) {
+    progressHandle.classList.add("visible");
+  }
+  updateUI();
+  renderSongs();
+}
+
+function playNext() {
+  currentIndex = (currentIndex + 1) % songs.length;
+  playSong(currentIndex);
+}
+
+function playPrev() {
+  currentIndex = (currentIndex - 1 + songs.length) % songs.length;
+  playSong(currentIndex);
+}
+
+function updateUI() {
+  playPauseBtn.textContent = isPlaying ? "◼" : "▶";
+  fullPlayPauseBtn.textContent = isPlaying ? "◼" : "▶";
+}
+
+function formatTime(seconds) {
+  if (isNaN(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function showFullPlayer() {
+  fullPlayer.classList.add("show");
+  document.body.style.overflow = 'hidden';
+}
+
+function hideFullPlayer() {
+  fullPlayer.classList.remove("show");
+  document.body.style.overflow = 'auto';
+}
+
+// Enhanced progress bar with drag functionality
+function updateProgressFromPosition(clientX) {
+  const rect = progressBarBg.getBoundingClientRect();
+  const clickX = clientX - rect.left;
+  const width = rect.width;
+  const percentage = Math.max(0, Math.min(1, clickX / width));
+  
+  if (audio.duration && !isNaN(audio.duration)) {
+    const newTime = percentage * audio.duration;
+    if (!isDragging) {
+      audio.currentTime = newTime;
+    }
+    
+    fullProgressBar.style.width = (percentage * 100) + "%";
+    currentTimeEl.textContent = formatTime(newTime);
+    
+    return newTime;
+  }
+  return 0;
+}
+
+// Event listeners
+audio.addEventListener("timeupdate", () => {
+  if (audio.duration && !isDragging && !isNaN(audio.duration)) {
+    const progress = (audio.currentTime / audio.duration) * 100;
+    fullProgressBar.style.width = progress + "%";
+    currentTimeEl.textContent = formatTime(audio.currentTime);
+  }
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  if (audio.duration && !isNaN(audio.duration)) {
+    totalTimeEl.textContent = formatTime(audio.duration);
+  }
+});
+
+audio.addEventListener("loadedmetadata", () => {
+  console.log("Song:",songs[currentIndex].title, "Duration:", audio.duration);
+});
+
+audio.addEventListener("ended", () => {
+  playNext();
+});
+
+audio.addEventListener("play", () => {
+  isPlaying = true;
+  updateUI();
+  renderSongs();
+});
+
+audio.addEventListener("pause", () => {
+  isPlaying = false;
+  updateUI();
+  renderSongs();
+});
+
+audio.addEventListener("error", (e) => {
+  console.log('Audio error:', e);
+  isPlaying = false;
+  updateUI();
+  renderSongs();
+});
+
+// Click on progress bar
+progressBarBg.addEventListener("click", (e) => {
+  if (!isDragging) {
+    const newTime = updateProgressFromPosition(e.clientX);
+    if (audio.duration && !isNaN(audio.duration)) {
+      audio.currentTime = newTime;
+    }
+  }
+});
+
+// Mouse drag events for progress handle
+progressHandle.addEventListener("mousedown", (e) => {
+  e.preventDefault();
+  isDragging = true;
+  wasPlaying = isPlaying;
+  progressHandle.classList.add("dragging");
+  
+  if (wasPlaying) {
+    audio.pause();
+  }
+});
+
+document.addEventListener("mousemove", (e) => {
+  if (isDragging) {
+    updateProgressFromPosition(e.clientX);
+  }
+});
+
+document.addEventListener("mouseup", (e) => {
+  if (isDragging) {
+    isDragging = false;
+    progressHandle.classList.remove("dragging");
+    
+    const newTime = updateProgressFromPosition(e.clientX);
+    if (audio.duration && !isNaN(audio.duration)) {
+      audio.currentTime = newTime;
+    }
+    
+    if (wasPlaying) {
+      audio.play().catch(e => console.log('Resume playback failed:', e));
+    }
+  }
+});
+
+// Touch events for mobile support
+progressHandle.addEventListener("touchstart", (e) => {
+  e.preventDefault();
+  isDragging = true;
+  wasPlaying = isPlaying;
+  progressHandle.classList.add("dragging");
+  
+  if (wasPlaying) {
+    audio.pause();
+  }
+}, { passive: false });
+
+document.addEventListener("touchmove", (e) => {
+  if (isDragging && e.touches[0]) {
+    e.preventDefault();
+    updateProgressFromPosition(e.touches[0].clientX);
+  }
+}, { passive: false });
+
+document.addEventListener("touchend", (e) => {
+  if (isDragging) {
+    isDragging = false;
+    progressHandle.classList.remove("dragging");
+    
+    const touch = e.changedTouches[0];
+    if (touch) {
+      const newTime = updateProgressFromPosition(touch.clientX);
+      if (audio.duration && !isNaN(audio.duration)) {
+        audio.currentTime = newTime;
+      }
+    }
+    
+    if (wasPlaying) {
+      audio.play().catch(e => console.log('Resume playback failed:', e));
+    }
+  }
+});
+
+// Song list events
+songsList.addEventListener("click", (e) => {
+  const item = e.target.closest(".song-item");
+  if (!item) return;
+  
+  const id = parseInt(item.dataset.id);
+  const index = songs.findIndex(s => s.id === id);
+  
+  if (index !== -1) {
+    if (index === currentIndex && audio.src) {
+      // If clicking on currently selected song, toggle play/pause
+      togglePlay();
+    } else {
+      // Play the selected song
+      playSong(index);
+    }
+  }
+});
+
+// Bottom player events
+playPauseBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  togglePlay();
+});
+
+document.getElementById("nextBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  playNext();
+});
+
+document.getElementById("prevBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  playPrev();
+});
+
+bottomPlayer.addEventListener("click", (e) => {
+  if (!e.target.closest('button')) {
+    showFullPlayer();
+  }
+});
+
+// Full player events
+fullPlayPauseBtn.addEventListener("click", togglePlay);
+document.getElementById("fullNextBtn").addEventListener("click", playNext);
+document.getElementById("fullPrevBtn").addEventListener("click", playPrev);
+closeFull.addEventListener("click", hideFullPlayer);
+
+// 5s Forward/Backward controls
+document.getElementById("backward5Btn").addEventListener("click", () => {
+  if (audio.currentTime) {
+    audio.currentTime = Math.max(0, audio.currentTime - 5);
+  }
+});
+
+document.getElementById("forward5Btn").addEventListener("click", () => {
+  if (audio.duration && !isNaN(audio.duration)) {
+    audio.currentTime = Math.min(audio.duration, audio.currentTime + 5);
+  }
+});
+
+// Keyboard shortcuts
+document.addEventListener("keydown", (e) => {
+  if (e.code === 'Space' && !e.target.matches('input, textarea')) {
+    e.preventDefault();
+    togglePlay();
+  } else if (e.code === 'ArrowRight') {
+    playNext();
+  } else if (e.code === 'ArrowLeft') {
+    playPrev();
+  } else if (e.code === 'Escape' && fullPlayer.classList.contains('show')) {
+    hideFullPlayer();
+  }
+});
+
+// Handle visibility change (when user switches tabs)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && isPlaying) {
+    // Keep playing when tab is hidden
+  }
+});
+
+// Prevent context menu on long press (mobile)
+document.addEventListener("contextmenu", (e) => {
+  if (e.target.closest(".progress-handle") || e.target.closest(".progress-bar-bg")) {
+    e.preventDefault();
+  }
+});
+
+// Initialize
+renderSongs();
+
+// Auto-enable audio context on first user interaction
+document.addEventListener("click", function initAudioContext() {
+  // This helps with browser autoplay policies
+  if (audio && !audio.src) {
+    console.log('Audio context initialized');
+  }
+}, { once: true });
+
+// Additional error handling for audio
+audio.addEventListener('canplay', () => {
+  console.log('Audio can play');
+});
+
+audio.addEventListener('loadstart', () => {
+  console.log('Audio load started');
+});
+
+// Set initial state
+updateUI();
+  </script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F I R E P Y Login</title>
+    <link rel="stylesheet" href="{% static 'backend/css/style.css' %}">
+    <link rel="shortcut icon" href="{% static 'backend/images/firepy_portrait-34.jpg' %}" type="image/x-icon">
+</head>
+
+<body>
+    <header>
+        <h1>F I R E P Y - Login</h1>
+    </header>
+
+    <div class="container">
+        <h2>Welcome Back</h2>
+        <form method="POST" action="{% url 'user_login' %}">
+        {% csrf_token %}
+            <!-- Login Form -->
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" placeholder="Enter your registred Username" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" placeholder="Enter your password" required>
+        </div>
+
+        <!-- Login Button -->
+        <div class="form-group">
+            <input id="loginbtn" type="submit" value="Login" >
+        </div>
+        {% if messages %}
+        {% for message in messages %}
+            <p class="message {{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+        {% endif %}
+
+        <!-- Register Link -->
+        <div class="register-link">
+            <p>Don't have an account? <a href="{% url 'ogregister' %}">Register</a></p>
+        </div>
+        </form>
+
+    </div>
+    <footer>
+        &copy; 2025 F I R E P Y. All rights reserved.
+    </footer>
+
+
+    
+    <script src="{% static 'backend/js/script.js' %}"></script>
+</body>
+
+</html>
