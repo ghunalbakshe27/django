@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
+from backend.models import Song
 
 from django.contrib import messages
 from django.views.decorators.csrf import csrf_protect
@@ -33,7 +34,14 @@ def mixlist(request):
     return render(request, 'backend/mixlist.html')
 
 def new_releases(request):
-    return render(request, 'backend/new releases.html')
+     # Get all songs with category 'new_release', ordered by newest first
+    new_release_songs = Song.objects.filter(category='new_release').order_by('-release_date')[:12]
+    
+    context = {
+        'songs': new_release_songs
+    }
+    return render(request, 'backend/new_releases.html', context)
+    # return render(request, 'backend/new releases.html')
 def phonk(request):
     return render(request, 'backend/phonk.html')
 

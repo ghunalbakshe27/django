@@ -13,7 +13,6 @@ urlpatterns = [
     path('bhajan/', views.bhajan, name='bhajan'),
     path('drivelist/', views.drivelist, name='drivelist'),
     path('genres/', views.genres, name='genres'),
-
     path('honeys/', views.honeys, name='honeys'),
     path('indianhits/', views.indianhits, name='indianhits'),
     path('mixlist/', views.mixlist, name='mixlist'),

@@ -12,7 +12,7 @@
   <!-- Header -->
   <div class="header">
     <div class="header-content">
-      <button class="back-btn">← Back</button>
+      <a href="{% url 'homepage' %}"><button class="back-btn">← Back</button></a>
       <div class="header-title">FIREPY - ARIJIT</div>
     </div>
   </div>
@@ -79,8 +79,10 @@
   </div>
 
   <audio id="audioPlayer"></audio>
-  <script>
-// Song data with working demo audio URLs
+  {% verbatim %}
+    <script>
+    document.addEventListener('DOMContentLoaded',function(){
+      // Song data with working demo audio URLs
 const songs = [
   {
         id: 1,
@@ -225,6 +227,12 @@ function playSong(index) {
   currentIndex = index;
   const song = songs[currentIndex];
   audio.src = encodeURI(song.src);
+
+  // Wait for audio to be ready before playing
+  audio.addEventListener('canplay', function onCanPlay() {
+    console.log('✅ Audio ready, can seek');
+    audio.removeEventListener('canplay', onCanPlay);
+  });
   
   audio.play().then(() => {
     isPlaying = true;
@@ -503,16 +511,48 @@ document.getElementById("fullNextBtn").addEventListener("click", playNext);
 document.getElementById("fullPrevBtn").addEventListener("click", playPrev);
 closeFull.addEventListener("click", hideFullPlayer);
 
-// 5s Forward/Backward controls
+// // 5s Forward/Backward controls
+// Backward 5 seconds - ROBUST VERSION
 document.getElementById("backward5Btn").addEventListener("click", () => {
-  if (audio.currentTime) {
-    audio.currentTime = Math.max(0, audio.currentTime - 5);
+  console.log('🔙 Backward clicked');
+  console.log('Current time:', audio.currentTime);
+  console.log('Duration:', audio.duration);
+  console.log('Ready state:', audio.readyState);
+  console.log('Seekable ranges:', audio.seekable.length);
+  
+  // Check if audio is ready for seeking
+  if (audio.readyState >= 2) { // HAVE_CURRENT_DATA or higher
+    try {
+      const newTime = Math.max(0, audio.currentTime - 5);
+      audio.currentTime = newTime;
+      console.log('✅ New time set to:', audio.currentTime);
+    } catch (e) {
+      console.error('❌ Seek failed:', e);
+    }
+  } else {
+    console.warn('⚠️ Audio not ready for seeking yet');
   }
 });
 
+// Forward 5 seconds - ROBUST VERSION
 document.getElementById("forward5Btn").addEventListener("click", () => {
-  if (audio.duration && !isNaN(audio.duration)) {
-    audio.currentTime = Math.min(audio.duration, audio.currentTime + 5);
+  console.log('⏩ Forward clicked');
+  console.log('Current time:', audio.currentTime);
+  console.log('Duration:', audio.duration);
+  console.log('Ready state:', audio.readyState);
+  console.log('Seekable ranges:', audio.seekable.length);
+  
+  // Check if audio is ready for seeking
+  if (audio.readyState >= 2 && audio.duration && !isNaN(audio.duration)) {
+    try {
+      const newTime = Math.min(audio.duration, audio.currentTime + 5);
+      audio.currentTime = newTime;
+      console.log('✅ New time set to:', audio.currentTime);
+    } catch (e) {
+      console.error('❌ Seek failed:', e);
+    }
+  } else {
+    console.warn('⚠️ Audio not ready for seeking yet');
   }
 });
 
@@ -566,6 +606,8 @@ audio.addEventListener('loadstart', () => {
 
 // Set initial state
 updateUI();
+    });
   </script>
+  {% endverbatim%}
 </body>
 </html>
