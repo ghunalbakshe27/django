@@ -4,6 +4,12 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # TEST URLS FOR DEBUGGING PURPOSES
+    # path('simple-test/', views.simple_test, name='simple_test'),
+    # path('debug-test/', views.debug_test, name='debug_test'),
+    # path('db-test/', views.db_test, name='db_test'),
+
+
     path('', views.user_login, name='user_login'),
     path('ogregister/', views.user_register, name='ogregister'),
     path('homepage/', views.homepage, name='homepage'),
@@ -23,6 +29,8 @@ urlpatterns = [
     path('top/', views.top, name='top'),
     path('topeng/', views.topeng, name='topeng'),
     path('trend/', views.trend, name='trend'),
+
+    
 
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
