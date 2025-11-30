@@ -8,6 +8,19 @@
     <link rel="stylesheet" href="{% static 'backend/css/homepage.css' %}">
     <link rel="shortcut icon" href="{% static 'backend/images/firepy.jpeg' %}" type="image/x-icon">
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            padding-bottom: 100px;
+        }
+
         .song-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -19,13 +32,38 @@
             background: #1a1a1a;
             border-radius: 8px;
             padding: 15px;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
             cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
         
         .song-card:hover {
             transform: translateY(-5px);
             box-shadow: 0 5px 15px rgba(255, 87, 51, 0.3);
+        }
+
+        .song-card-play-btn {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 87, 51, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .song-card:hover .song-card-play-btn {
+            opacity: 1;
         }
         
         .song-card img {
@@ -56,6 +94,367 @@
             color: #666;
             margin-top: 5px;
         }
+
+        /* MINI PLAYER AT BOTTOM */
+        .mini-player {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 100px;
+            background: linear-gradient(to top, #1a1a1a, #2a2a2a);
+            border-top: 2px solid #ff5733;
+            display: flex;
+            gap: 15px;
+            padding: 10px 15px;
+            align-items: center;
+            z-index: 100;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.8);
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .mini-player.hidden {
+            display: none;
+        }
+
+        .mini-player:hover {
+            background: linear-gradient(to top, #2a2a2a, #3a3a3a);
+        }
+
+        .mini-player-cover {
+            width: 80px;
+            height: 80px;
+            border-radius: 5px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .mini-player-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mini-player-title {
+            font-weight: bold;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mini-player-artist {
+            color: #888;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .mini-player-progress {
+            width: 100%;
+            height: 3px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 5px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .mini-player-progress-bar {
+            height: 100%;
+            background: #ff5733;
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .mini-player-progress.dragging .mini-player-progress-bar {
+            background: #ffaa33;
+        }
+
+        .mini-player-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .mini-player-btn {
+            background: none;
+            border: none;
+            color: #ff5733;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            transition: color 0.2s ease, transform 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mini-player-btn:hover {
+            color: #ffaa33;
+            transform: scale(1.1);
+        }
+
+        .mini-player-btn.play-pause {
+            font-size: 24px;
+        }
+
+        /* FULL PLAYER OVERLAY */
+        .full-player {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            gap: 30px;
+            padding: 40px 20px;
+            overflow-y: auto;
+        }
+
+        .full-player.active {
+            display: flex;
+        }
+
+        .full-player-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 30px;
+            cursor: pointer;
+            padding: 10px;
+            transition: color 0.2s ease;
+        }
+
+        .full-player-close:hover {
+            color: #ff5733;
+        }
+
+        .full-player-cover {
+            width: 300px;
+            height: 300px;
+            border-radius: 15px;
+            object-fit: cover;
+            box-shadow: 0 20px 60px rgba(255, 87, 51, 0.4);
+            animation: playerCoverRotate 0.5s ease-out;
+        }
+
+        @keyframes playerCoverRotate {
+            from {
+                transform: scale(0.8);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .full-player-info {
+            text-align: center;
+        }
+
+        .full-player-title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+
+        .full-player-artist {
+            font-size: 16px;
+            color: #888;
+        }
+
+        .full-player-progress-container {
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .full-player-time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #888;
+            margin: 10px 0;
+        }
+
+        .full-player-progress {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            margin: 10px 0;
+        }
+
+        .full-player-progress-bar {
+            height: 100%;
+            background: #ff5733;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s linear;
+            position: relative;
+        }
+
+        .full-player-progress-bar::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 12px;
+            height: 12px;
+            background: #ff5733;
+            border-radius: 50%;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .full-player-progress:hover .full-player-progress-bar::after {
+            opacity: 1;
+        }
+
+        .full-player-progress.dragging .full-player-progress-bar {
+            background: #ffaa33;
+        }
+
+        .full-player-progress.dragging .full-player-progress-bar::after {
+            opacity: 1;
+        }
+
+        .full-player-controls {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .full-player-btn {
+            background: none;
+            border: none;
+            color: #ff5733;
+            font-size: 28px;
+            cursor: pointer;
+            padding: 10px;
+            transition: color 0.2s ease, transform 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .full-player-btn:hover {
+            color: #ffaa33;
+            transform: scale(1.15);
+        }
+
+        .full-player-btn.play-pause {
+            font-size: 48px;
+            width: 80px;
+            height: 80px;
+            border: 2px solid #ff5733;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+
+        .full-player-btn.play-pause:hover {
+            background: rgba(255, 87, 51, 0.1);
+            border-color: #ffaa33;
+        }
+
+        .full-player-volume {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .full-player-volume-slider {
+            width: 120px;
+            height: 4px;
+            border-radius: 2px;
+            background: #333;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .full-player-volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff5733;
+            cursor: pointer;
+        }
+
+        .full-player-volume-slider::-moz-range-thumb {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff5733;
+            cursor: pointer;
+            border: none;
+        }
+
+        /* AUDIO ELEMENT */
+        #audioPlayer {
+            display: none;
+        }
+
+        /* UTILITY */
+        .user-select-none {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+        }
+
+        @media (max-width: 768px) {
+            .full-player-cover {
+                width: 200px;
+                height: 200px;
+            }
+
+            .full-player-title {
+                font-size: 20px;
+            }
+
+            .full-player-btn {
+                font-size: 24px;
+            }
+
+            .full-player-btn.play-pause {
+                font-size: 36px;
+                width: 60px;
+                height: 60px;
+            }
+
+            .mini-player {
+                height: 80px;
+            }
+
+            .mini-player-cover {
+                width: 60px;
+                height: 60px;
+            }
+
+            .mini-player-btn {
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -77,14 +476,8 @@
             </div>
         </div>
         <nav>
-           <a href="{% url 'homepage' %}">𝕓𝕒𝕔𝕜</a> <!-- home to go  back to homepage -->
+           <a href="{% url 'homepage' %}">𝕓𝕒𝕔𝕜</a>
         </nav>
-        <!-- <button class="account-btn" id="accountBtn">
-            <div class="user-avatar">
-                <div class="user-head"></div>
-                <div class="user-body"></div>
-            </div>
-        </button> -->
     </header>
 
     <div class="container">
@@ -94,12 +487,13 @@
             {% if songs %}
                 <div class="song-grid">
                     {% for song in songs %}
-                    <div class="song-card">
+                    <div class="song-card" onclick="playSong({{ forloop.counter0 }})">
                         {% if song.cover_image %}
-                            <img src="{{ song.cover_image.url }}" alt="{{ song.title }}">
+                            <img src="{{ song.cover_image.url }}" alt="{{ song.title }}" loading="lazy">
                         {% else %}
-                            <img src="{% static 'backend/images/default-cover.jpg' %}" alt="{{ song.title }}">
+                            <img src="{% static 'backend/images/default-cover.jpg' %}" alt="{{ song.title }}" loading="lazy">
                         {% endif %}
+                        <div class="song-card-play-btn">▶</div>
                         
                         <div class="song-info">
                             <div class="song-title">{{ song.title }}</div>
@@ -111,16 +505,329 @@
                     </div>
                     {% endfor %}
                 </div>
-            <!-- {% else %}
-                <p style="color: #888; text-align: center; padding: 40px;">No new releases available at the moment.</p>
-            {% endif %} -->
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- AUDIO ELEMENT -->
+    <audio id="audioPlayer"></audio>
+
+    <!-- MINI PLAYER -->
+    <div class="mini-player hidden" id="miniPlayer">
+        <img id="miniCover" class="mini-player-cover" src="" alt="Album Cover">
+        <div class="mini-player-info">
+            <div class="mini-player-title" id="miniTitle">Select a song</div>
+            <div class="mini-player-artist" id="miniArtist">Artist Name</div>
+            <div class="mini-player-progress user-select-none" id="miniProgress">
+                <div class="mini-player-progress-bar" id="miniProgressBar"></div>
+            </div>
+        </div>
+        <div class="mini-player-controls">
+            <button class="mini-player-btn" onclick="previousSong(event)">⏮</button>
+            <button class="mini-player-btn play-pause" id="miniPlayBtn" onclick="togglePlay(event)">▶</button>
+            <button class="mini-player-btn" onclick="nextSong(event)">⏭</button>
+            <button class="mini-player-btn" onclick="expandPlayer(event)">⛶</button>
+        </div>
+    </div>
+
+    <!-- FULL PLAYER -->
+    <div class="full-player" id="fullPlayer">
+        <button class="full-player-close" onclick="collapsePlayer()">✕</button>
+        <img id="fullCover" class="full-player-cover" src="" alt="Album Cover">
+        
+        <div class="full-player-info">
+            <div class="full-player-title" id="fullTitle">Song Title</div>
+            <div class="full-player-artist" id="fullArtist">Artist Name</div>
+        </div>
+
+        <div class="full-player-progress-container">
+            <div class="full-player-time">
+                <span id="currentTime">0:00</span>
+                <span id="totalTime">0:00</span>
+            </div>
+            <div class="full-player-progress user-select-none" id="fullProgress">
+                <div class="full-player-progress-bar" id="fullProgressBar"></div>
+            </div>
+        </div>
+
+        <div class="full-player-controls">
+            <button class="full-player-btn" onclick="previousSong(event)">⏮</button>
+            <button class="full-player-btn play-pause" id="fullPlayBtn" onclick="togglePlay(event)">▶</button>
+            <button class="full-player-btn" onclick="nextSong(event)">⏭</button>
+        </div>
+
+        <div class="full-player-volume">
+            <span>🔊</span>
+            <input type="range" id="volumeSlider" class="full-player-volume-slider" min="0" max="100" value="100">
         </div>
     </div>
     
     <footer>
         <p>&copy; 2025 F I R E P Y. All Rights Reserved.</p>
     </footer>
-    
-    <script src="{% static 'backend/js/homepage.js' %}"></script>
+
+    <script>
+        // ============ GLOBAL STATE ============
+        const audio = document.getElementById('audioPlayer');
+        let currentSongIndex = -1;
+        let isPlaying = false;
+        let globalDragging = false;
+        let songsPlaylist = [];
+        let isLoadingSong = false; // NEW: Track if we're in the middle of loading a song
+
+        // ============ DJANGO SONGS DATA ============
+        // Build playlist directly from Django context
+        const songsData = {% autoescape off %}{{ songs_json }}{% endautoescape %};
+        if (songsData && Array.isArray(songsData)) {
+            songsPlaylist = songsData;
+        } else {
+            // Fallback: build from DOM if data not available
+            const songElements = document.querySelectorAll('.song-card');
+            songElements.forEach((card, index) => {
+                const title = card.querySelector('.song-title').textContent;
+                const artist = card.querySelector('.song-artist').textContent;
+                const cover = card.querySelector('img').src;
+                
+                songsPlaylist.push({
+                    id: index,
+                    title: title,
+                    artist: artist,
+                    cover: cover,
+                    audio: ''
+                });
+            });
+        }
+
+        // ============ TIME FORMATTING ============
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        // ============ PLAY SONG ============
+        function playSong(index) {
+            // Stop previous playback
+            audio.pause();
+            isLoadingSong = true; // BLOCK progress updates during load
+            
+            currentSongIndex = index;
+            const song = songsPlaylist[index];
+            
+            if (!song) return;
+
+            // Update UI
+            document.getElementById('miniTitle').textContent = song.title;
+            document.getElementById('miniArtist').textContent = song.artist;
+            document.getElementById('miniCover').src = song.cover;
+            
+            document.getElementById('fullTitle').textContent = song.title;
+            document.getElementById('fullArtist').textContent = song.artist;
+            document.getElementById('fullCover').src = song.cover;
+
+            // RESET PROGRESS BARS BEFORE CHANGING SONG
+            document.getElementById('miniProgressBar').style.width = '0%';
+            document.getElementById('fullProgressBar').style.width = '0%';
+            document.getElementById('currentTime').textContent = '0:00';
+            document.getElementById('totalTime').textContent = '0:00';
+
+            // Set audio source and play
+            audio.src = song.audio;
+            audio.load(); // Explicitly load the new source
+            
+            // Wait for canplay, then allow updates and play
+            const canplayHandler = () => {
+                isLoadingSong = false; // ALLOW progress updates now
+                audio.play().catch(err => console.log('Play failed:', err));
+                updatePlayButtons();
+            };
+            
+            audio.addEventListener('canplay', canplayHandler, { once: true });
+
+            // Show mini player
+            document.getElementById('miniPlayer').classList.remove('hidden');
+            updatePlayButtons();
+        }
+
+        // ============ TOGGLE PLAY/PAUSE ============
+        function togglePlay(e) {
+            if (e) e.stopPropagation();
+
+            if (audio.paused) {
+                audio.play().catch(err => console.log('Play failed:', err));
+                isPlaying = true;
+            } else {
+                audio.pause();
+                isPlaying = false;
+            }
+            updatePlayButtons();
+        }
+
+        // ============ UPDATE PLAY BUTTONS ============
+        function updatePlayButtons() {
+            const miniPlayBtn = document.getElementById('miniPlayBtn');
+            const fullPlayBtn = document.getElementById('fullPlayBtn');
+            
+            if (audio.paused) {
+                miniPlayBtn.textContent = '▶';
+                fullPlayBtn.textContent = '▶';
+                isPlaying = false;
+            } else {
+                miniPlayBtn.textContent = '⏸';
+                fullPlayBtn.textContent = '⏸';
+                isPlaying = true;
+            }
+        }
+
+        // ============ PREVIOUS SONG ============
+        function previousSong(e) {
+            if (e) e.stopPropagation();
+            if (currentSongIndex > 0) {
+                playSong(currentSongIndex - 1);
+            }
+        }
+
+        // ============ NEXT SONG ============
+        function nextSong(e) {
+            if (e) e.stopPropagation();
+            if (currentSongIndex < songsPlaylist.length - 1) {
+                playSong(currentSongIndex + 1);
+            }
+        }
+
+        // ============ EXPAND PLAYER ============
+        function expandPlayer(e) {
+            if (e) e.stopPropagation();
+            document.getElementById('fullPlayer').classList.add('active');
+        }
+
+        // ============ COLLAPSE PLAYER ============
+        function collapsePlayer() {
+            document.getElementById('fullPlayer').classList.remove('active');
+        }
+
+        // ============ SEEK TO TIME ============
+        function seekTo(progressElement, clientX) {
+            if (!audio.duration || isNaN(audio.duration)) return;
+            
+            const rect = progressElement.getBoundingClientRect();
+            const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            audio.currentTime = percent * audio.duration;
+        }
+
+        // ============ SETUP PROGRESS BAR ============
+        function setupProgressBar(progressElement, progressBarElement) {
+            let isDragging = false;
+
+            // Mouse events
+            progressElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                globalDragging = true;
+                progressElement.classList.add('dragging', 'user-select-none');
+                seekTo(progressElement, e.clientX);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging || !globalDragging) return;
+                seekTo(progressElement, e.clientX);
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    globalDragging = false;
+                    progressElement.classList.remove('dragging');
+                }
+            });
+
+            // Touch events
+            progressElement.addEventListener('touchstart', (e) => {
+                isDragging = true;
+                globalDragging = true;
+                progressElement.classList.add('dragging', 'user-select-none');
+                seekTo(progressElement, e.touches[0].clientX);
+            });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!isDragging || !globalDragging) return;
+                seekTo(progressElement, e.touches[0].clientX);
+            });
+
+            document.addEventListener('touchend', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    globalDragging = false;
+                    progressElement.classList.remove('dragging');
+                }
+            });
+
+            // Click to seek
+            progressElement.addEventListener('click', (e) => {
+                seekTo(progressElement, e.clientX);
+            });
+        }
+
+        // ============ UPDATE PROGRESS BARS ============
+        function updateProgressBars() {
+            // Don't update if dragging, loading new song, or audio not ready
+            if (globalDragging || isLoadingSong) return;
+            
+            // Safety check: ensure audio has metadata loaded
+            if (!audio.duration || isNaN(audio.duration)) {
+                return;
+            }
+
+            const percent = (audio.currentTime / audio.duration) * 100;
+
+            // Update mini progress
+            document.getElementById('miniProgressBar').style.width = percent + '%';
+
+            // Update full progress
+            document.getElementById('fullProgressBar').style.width = percent + '%';
+            document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
+            document.getElementById('totalTime').textContent = formatTime(audio.duration);
+        }
+
+        // ============ AUTO NEXT SONG ============
+        function checkSongEnd() {
+            if (audio.ended && currentSongIndex < songsPlaylist.length - 1) {
+                nextSong();
+            }
+        }
+
+        // ============ VOLUME CONTROL ============
+        document.getElementById('volumeSlider').addEventListener('input', (e) => {
+            audio.volume = e.target.value / 100;
+        });
+
+        // ============ AUDIO EVENT LISTENERS ============
+        audio.addEventListener('timeupdate', updateProgressBars);
+        audio.addEventListener('ended', checkSongEnd);
+        audio.addEventListener('play', updatePlayButtons);
+        audio.addEventListener('pause', updatePlayButtons);
+        audio.addEventListener('loadedmetadata', () => {
+            document.getElementById('totalTime').textContent = formatTime(audio.duration);
+        });
+
+        // ============ INITIALIZE PROGRESS BARS ============
+        setupProgressBar(
+            document.getElementById('miniProgress'),
+            document.getElementById('miniProgressBar')
+        );
+
+        setupProgressBar(
+            document.getElementById('fullProgress'),
+            document.getElementById('fullProgressBar')
+        );
+
+        // ============ MINI PLAYER CLICK TO EXPAND ============
+        document.getElementById('miniPlayer').addEventListener('click', (e) => {
+            if (!e.target.classList.contains('mini-player-btn') && 
+                !e.target.parentElement.classList.contains('mini-player-btn')) {
+                expandPlayer();
+            }
+        });
+    </script>
 </body>
 </html>

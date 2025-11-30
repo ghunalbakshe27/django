@@ -579,8 +579,22 @@ def new_releases(request):
      # Get all songs with category 'new_release', ordered by newest first
     new_release_songs = Song.objects.filter(category='new_releases').order_by('-release_date')[:12]
     
+    import json
+    songs_json = json.dumps([
+        {
+            'id': song.id,
+            'title': song.title,
+            'artist': song.artist,
+            'cover': song.cover_image.url if song.cover_image else '/static/backend/images/default-cover.jpg',
+            'audio': song.audio_file.url if song.audio_file else '',
+            'duration': song.duration or '0:00'
+        }
+        for song in new_release_songs
+    ])
+    
     context = {
-        'songs': new_release_songs
+        'songs': new_release_songs,
+        'songs_json': songs_json
     }
     return render(request, 'backend/new_releases.html', context)
     # return render(request, 'backend/new releases.html')
