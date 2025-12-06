@@ -567,267 +567,373 @@
     </footer>
 
     <script>
-        // ============ GLOBAL STATE ============
-        const audio = document.getElementById('audioPlayer');
-        let currentSongIndex = -1;
-        let isPlaying = false;
-        let globalDragging = false;
-        let songsPlaylist = [];
-        let isLoadingSong = false; // NEW: Track if we're in the middle of loading a song
+/* ======= UPDATED OPTIMIZED AUDIO PLAYER SCRIPT =======
+   Improvements:
+   - loadToken to avoid stale canplay callbacks when user changes tracks fast
+   - pendingSeek if user seeks before metadata is available
+   - better error handling and safer UI updates
+   - still only change audio.src when different
+*/
 
-        // ============ DJANGO SONGS DATA ============
-        // Build playlist directly from Django context
-        const songsData = {% autoescape off %}{{ songs_json }}{% endautoescape %};
-        if (songsData && Array.isArray(songsData)) {
-            songsPlaylist = songsData;
+const audio = document.getElementById('audioPlayer');
+let currentSongIndex = -1;
+let globalDragging = false;
+let songsPlaylist = [];
+let loadToken = 0;           // increments each time we set a new src
+let pendingSeek = null;      // { time } if user seeks before metadata available
+
+// Build playlist from Django JSON (server-provided)
+const songsData = {% autoescape off %}{{ songs_json }}{% endautoescape %};
+if (Array.isArray(songsData)) {
+    songsPlaylist = songsData;
+} else {
+    // Fallback: build from DOM if needed
+    document.querySelectorAll('.song-card').forEach((card, index) => {
+        const title = card.querySelector('.song-title')?.textContent || `Track ${index+1}`;
+        const artist = card.querySelector('.song-artist')?.textContent || 'Unknown';
+        const cover = card.querySelector('img')?.src || '';
+        songsPlaylist.push({ id: index, title, artist, cover, audio: '' });
+    });
+}
+
+/* ---------- Helpers ---------- */
+function toAbsoluteUrl(url) {
+    try {
+        return new URL(url, location.origin).href;
+    } catch {
+        return url;
+    }
+}
+function formatTime(seconds) {
+    if (!seconds || isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+}
+function updatePlayButtons() {
+    const miniPlayBtn = document.getElementById('miniPlayBtn');
+    const fullPlayBtn = document.getElementById('fullPlayBtn');
+    if (audio.paused || !audio.src) {
+        miniPlayBtn.textContent = '▶';
+        fullPlayBtn.textContent = '▶';
+    } else {
+        miniPlayBtn.textContent = '⏸';
+        fullPlayBtn.textContent = '⏸';
+    }
+}
+
+/* ---------- UI track update ---------- */
+function updateTrackUI(song) {
+    document.getElementById('miniTitle').textContent = song.title || 'Unknown Title';
+    document.getElementById('miniArtist').textContent = song.artist || 'Unknown Artist';
+    document.getElementById('miniCover').src = song.cover || "{% static 'backend/images/default-cover.jpg' %}";
+
+    document.getElementById('fullTitle').textContent = song.title || 'Unknown Title';
+    document.getElementById('fullArtist').textContent = song.artist || 'Unknown Artist';
+    document.getElementById('fullCover').src = song.cover || "{% static 'backend/images/default-cover.jpg' %}";
+
+    // Reset visual progress while new metadata loads (if applicable)
+    document.getElementById('miniProgressBar').style.width = '0%';
+    document.getElementById('fullProgressBar').style.width = '0%';
+    document.getElementById('currentTime').textContent = '0:00';
+    if (!audio.duration || isNaN(audio.duration)) {
+        document.getElementById('totalTime').textContent = '0:00';
+    } else {
+        document.getElementById('totalTime').textContent = formatTime(audio.duration);
+    }
+}
+
+/* ---------- Core: playSong ---------- */
+function playSong(index) {
+    if (index < 0 || index >= songsPlaylist.length) return;
+    const song = songsPlaylist[index];
+    if (!song) return;
+
+    const newSrc = toAbsoluteUrl(song.audio || '');
+
+    // If same song is already playing and same src, just ensure UI and play if paused
+    if (currentSongIndex === index && audio.src === newSrc) {
+        document.getElementById('miniPlayer').classList.remove('hidden');
+        updateTrackUI(song);
+        if (audio.paused) {
+            audio.play().catch(err => console.warn('play error:', err));
+        }
+        updatePlayButtons();
+        return;
+    }
+
+    currentSongIndex = index;
+    updateTrackUI(song);
+    document.getElementById('miniPlayer').classList.remove('hidden');
+
+    // If src changed, update audio.src and load (use loadToken to track current load)
+    if (!audio.src || audio.src !== newSrc) {
+        loadToken += 1;
+        const myToken = loadToken;
+        pendingSeek = null; // clear previous pending seek
+
+        // Pause current playback and change source
+        try { audio.pause(); } catch (e) {}
+        audio.src = newSrc;
+
+        // Listen for metadata loaded and canplay for this token only
+        const onLoadedMetadata = () => {
+            if (myToken !== loadToken) return; // stale
+            document.getElementById('totalTime').textContent = formatTime(audio.duration);
+            // If user requested a pending seek while metadata was absent, perform it now
+            if (pendingSeek !== null) {
+                audio.currentTime = Math.min(Math.max(0, pendingSeek), audio.duration || pendingSeek);
+                pendingSeek = null;
+            }
+        };
+
+        const onCanPlay = () => {
+            if (myToken !== loadToken) return; // stale event — ignore
+            audio.play().catch(err => console.warn('play failed:', err));
+            updatePlayButtons();
+            document.getElementById('totalTime').textContent = formatTime(audio.duration);
+        };
+
+        const onError = (ev) => {
+            if (myToken !== loadToken) return;
+            console.error('Audio error', ev, 'src:', audio.src);
+            // fallback: update UI so user can try again
+            updatePlayButtons();
+        };
+
+        // Remove any previous same listeners (safe)
+        audio.removeEventListener('loadedmetadata', audio._onLoadedMetadata || (() => {}));
+        audio.removeEventListener('canplay', audio._onCanPlay || (() => {}));
+        audio.removeEventListener('error', audio._onError || (() => {}));
+
+        // Save references so we can remove later
+        audio._onLoadedMetadata = onLoadedMetadata;
+        audio._onCanPlay = onCanPlay;
+        audio._onError = onError;
+
+        audio.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+        audio.addEventListener('canplay', onCanPlay, { once: true });
+        audio.addEventListener('error', onError);
+
+        // call load() to start fetching (some browsers/servers need this)
+        try { audio.load(); } catch (e) { /* ignore */ }
+    } else {
+        // Same src but different index (rare) → just play
+        audio.play().catch(err => console.warn('play failed:', err));
+    }
+    updatePlayButtons();
+}
+
+/* ---------- Play/Pause ---------- */
+function togglePlay(e) {
+    if (e) e.stopPropagation();
+    if (!audio.src) {
+        if (songsPlaylist.length) playSong(0);
+        return;
+    }
+    if (audio.paused) {
+        audio.play().catch(err => console.warn('play failed:', err));
+    } else {
+        audio.pause();
+    }
+    updatePlayButtons();
+}
+
+/* ---------- Prev/Next ---------- */
+function previousSong(e) {
+    if (e) e.stopPropagation();
+    if (currentSongIndex > 0) playSong(currentSongIndex - 1);
+}
+function nextSong(e) {
+    if (e) e.stopPropagation();
+    if (currentSongIndex < songsPlaylist.length - 1) playSong(currentSongIndex + 1);
+}
+
+/* ---------- Expand/Collapse ---------- */
+function expandPlayer(e) {
+    if (e) e.stopPropagation();
+    document.getElementById('fullPlayer').classList.add('active');
+}
+function collapsePlayer() {
+    document.getElementById('fullPlayer').classList.remove('active');
+}
+
+/* ---------- Seek Helpers ---------- */
+function seekTo(progressElement, clientX) {
+    // If no duration yet, compute percent and set pendingSeek in seconds
+    const rect = progressElement.getBoundingClientRect();
+    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+
+    if (!audio.duration || isNaN(audio.duration)) {
+        // set pendingSeek in seconds relative to an estimated duration fallback —
+        // if duration arrives later we'll clamp it then
+        // We store pendingSeek as percent-of-unknown; we convert to seconds when metadata arrives
+        pendingSeek = percent; // store percent until metadata arrives
+        // show temporary visual feedback on progress bar
+        document.getElementById('miniProgressBar').style.width = (percent * 100) + '%';
+        document.getElementById('fullProgressBar').style.width = (percent * 100) + '%';
+        return;
+    }
+
+    const newTime = percent * audio.duration;
+    const wasPlaying = !audio.paused;
+    audio.currentTime = newTime;
+    // some browsers pause when currentTime is set — ensure playback resumes if it was playing
+    if (wasPlaying) {
+        audio.play().catch(() => {});
+    }
+}
+
+/* ---------- Progress Bar Setup (mouse + touch) ---------- */
+function setupProgressBar(progressElement) {
+    let isDragging = false;
+
+    progressElement.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        globalDragging = true;
+        progressElement.classList.add('dragging', 'user-select-none');
+        seekTo(progressElement, e.clientX);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDragging || !globalDragging) return;
+        seekTo(progressElement, e.clientX);
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        globalDragging = false;
+        progressElement.classList.remove('dragging');
+
+        // If pendingSeek stored as percent and metadata now exists, convert to seconds
+        if (pendingSeek !== null && audio.duration && !isNaN(audio.duration)) {
+            const sec = Math.min(audio.duration, pendingSeek * audio.duration);
+            audio.currentTime = sec;
+            pendingSeek = null;
+        }
+    });
+
+    // Touch
+    progressElement.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        globalDragging = true;
+        progressElement.classList.add('dragging', 'user-select-none');
+        seekTo(progressElement, e.touches[0].clientX);
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isDragging || !globalDragging) return;
+        seekTo(progressElement, e.touches[0].clientX);
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        globalDragging = false;
+        progressElement.classList.remove('dragging');
+
+        if (pendingSeek !== null && audio.duration && !isNaN(audio.duration)) {
+            const sec = Math.min(audio.duration, pendingSeek * audio.duration);
+            audio.currentTime = sec;
+            pendingSeek = null;
+        }
+    });
+
+    // Click to seek
+    progressElement.addEventListener('click', (e) => {
+        seekTo(progressElement, e.clientX);
+    });
+}
+
+/* ---------- Progress Update ---------- */
+function updateProgressBars() {
+    // Avoid overwriting while user is dragging
+    if (globalDragging) return;
+
+    if (!audio.duration || isNaN(audio.duration)) {
+        // if pendingSeek is a percent, reflect it visually
+        if (pendingSeek !== null && typeof pendingSeek === 'number') {
+            const pct = Math.max(0, Math.min(1, pendingSeek)) * 100;
+            document.getElementById('miniProgressBar').style.width = pct + '%';
+            document.getElementById('fullProgressBar').style.width = pct + '%';
+        }
+        return;
+    }
+
+    const percent = (audio.currentTime / audio.duration) * 100;
+    document.getElementById('miniProgressBar').style.width = percent + '%';
+    document.getElementById('fullProgressBar').style.width = percent + '%';
+    document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
+    document.getElementById('totalTime').textContent = formatTime(audio.duration);
+}
+
+/* ---------- Auto-next when ended ---------- */
+function checkSongEnd() {
+    if (audio.ended) {
+        if (currentSongIndex < songsPlaylist.length - 1) {
+            playSong(currentSongIndex + 1);
         } else {
-            // Fallback: build from DOM if data not available
-            const songElements = document.querySelectorAll('.song-card');
-            songElements.forEach((card, index) => {
-                const title = card.querySelector('.song-title').textContent;
-                const artist = card.querySelector('.song-artist').textContent;
-                const cover = card.querySelector('img').src;
-                
-                songsPlaylist.push({
-                    id: index,
-                    title: title,
-                    artist: artist,
-                    cover: cover,
-                    audio: ''
-                });
-            });
-        }
-
-        // ============ TIME FORMATTING ============
-        function formatTime(seconds) {
-            if (!seconds || isNaN(seconds)) return '0:00';
-            const mins = Math.floor(seconds / 60);
-            const secs = Math.floor(seconds % 60);
-            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-        }
-
-        // ============ PLAY SONG ============
-        function playSong(index) {
-            // Stop previous playback
-            audio.pause();
-            isLoadingSong = true; // BLOCK progress updates during load
-            
-            currentSongIndex = index;
-            const song = songsPlaylist[index];
-            
-            if (!song) return;
-
-            // Update UI
-            document.getElementById('miniTitle').textContent = song.title;
-            document.getElementById('miniArtist').textContent = song.artist;
-            document.getElementById('miniCover').src = song.cover;
-            
-            document.getElementById('fullTitle').textContent = song.title;
-            document.getElementById('fullArtist').textContent = song.artist;
-            document.getElementById('fullCover').src = song.cover;
-
-            // RESET PROGRESS BARS BEFORE CHANGING SONG
-            document.getElementById('miniProgressBar').style.width = '0%';
-            document.getElementById('fullProgressBar').style.width = '0%';
-            document.getElementById('currentTime').textContent = '0:00';
-            document.getElementById('totalTime').textContent = '0:00';
-
-            // Set audio source and play
-            audio.src = song.audio;
-            audio.load(); // Explicitly load the new source
-            
-            // Wait for canplay, then allow updates and play
-            const canplayHandler = () => {
-                isLoadingSong = false; // ALLOW progress updates now
-                audio.play().catch(err => console.log('Play failed:', err));
-                updatePlayButtons();
-            };
-            
-            audio.addEventListener('canplay', canplayHandler, { once: true });
-
-            // Show mini player
-            document.getElementById('miniPlayer').classList.remove('hidden');
             updatePlayButtons();
         }
+    }
+}
 
-        // ============ TOGGLE PLAY/PAUSE ============
-        function togglePlay(e) {
-            if (e) e.stopPropagation();
+/* ---------- Volume ---------- */
+document.getElementById('volumeSlider').addEventListener('input', (e) => {
+    audio.volume = e.target.value / 100;
+});
 
-            if (audio.paused) {
-                audio.play().catch(err => console.log('Play failed:', err));
-                isPlaying = true;
-            } else {
-                audio.pause();
-                isPlaying = false;
-            }
-            updatePlayButtons();
-        }
+/* ---------- Audio Event Listeners ---------- */
+audio.addEventListener('timeupdate', updateProgressBars);
+audio.addEventListener('ended', checkSongEnd);
+audio.addEventListener('play', updatePlayButtons);
+audio.addEventListener('pause', updatePlayButtons);
+audio.addEventListener('loadedmetadata', () => {
+    // if pendingSeek stored as percent, convert to seconds now
+    if (pendingSeek !== null && typeof pendingSeek === 'number' && audio.duration && !isNaN(audio.duration)) {
+        const sec = Math.min(audio.duration, pendingSeek * audio.duration);
+        audio.currentTime = sec;
+        pendingSeek = null;
+    }
+    document.getElementById('totalTime').textContent = formatTime(audio.duration);
+});
 
-        // ============ UPDATE PLAY BUTTONS ============
-        function updatePlayButtons() {
-            const miniPlayBtn = document.getElementById('miniPlayBtn');
-            const fullPlayBtn = document.getElementById('fullPlayBtn');
-            
-            if (audio.paused) {
-                miniPlayBtn.textContent = '▶';
-                fullPlayBtn.textContent = '▶';
-                isPlaying = false;
-            } else {
-                miniPlayBtn.textContent = '⏸';
-                fullPlayBtn.textContent = '⏸';
-                isPlaying = true;
-            }
-        }
+/* ---------- Initialize progress bars ---------- */
+setupProgressBar(document.getElementById('miniProgress'));
+setupProgressBar(document.getElementById('fullProgress'));
 
-        // ============ PREVIOUS SONG ============
-        function previousSong(e) {
-            if (e) e.stopPropagation();
-            if (currentSongIndex > 0) {
-                playSong(currentSongIndex - 1);
-            }
-        }
+/* ---------- Mini player click to expand ---------- */
+document.getElementById('miniPlayer').addEventListener('click', (e) => {
+    if (!e.target.classList.contains('mini-player-btn') &&
+        !e.target.closest('.mini-player-controls')) {
+        expandPlayer();
+    }
+});
 
-        // ============ NEXT SONG ============
-        function nextSong(e) {
-            if (e) e.stopPropagation();
-            if (currentSongIndex < songsPlaylist.length - 1) {
-                playSong(currentSongIndex + 1);
-            }
-        }
+/* ---------- Attach onclick listeners to song cards (if not already) ---------- */
+document.querySelectorAll('.song-card').forEach((card, idx) => {
+    card.addEventListener('click', () => playSong(idx));
+});
 
-        // ============ EXPAND PLAYER ============
-        function expandPlayer(e) {
-            if (e) e.stopPropagation();
-            document.getElementById('fullPlayer').classList.add('active');
-        }
+/* ---------- Init UI ---------- */
+if (songsPlaylist.length > 0) {
+    const first = songsPlaylist[0];
+    document.getElementById('miniTitle').textContent = first.title || 'Select a song';
+    document.getElementById('miniArtist').textContent = first.artist || '';
+    document.getElementById('miniCover').src = first.cover || "{% static 'backend/images/default-cover.jpg' %}";
+}
 
-        // ============ COLLAPSE PLAYER ============
-        function collapsePlayer() {
-            document.getElementById('fullPlayer').classList.remove('active');
-        }
+/* ---------- Expose globals for inline HTML handlers ---------- */
+window.playSong = playSong;
+window.togglePlay = togglePlay;
+window.previousSong = previousSong;
+window.nextSong = nextSong;
+window.expandPlayer = expandPlayer;
+window.collapsePlayer = collapsePlayer;
+</script>
 
-        // ============ SEEK TO TIME ============
-        function seekTo(progressElement, clientX) {
-            if (!audio.duration || isNaN(audio.duration)) return;
-            
-            const rect = progressElement.getBoundingClientRect();
-            const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-            audio.currentTime = percent * audio.duration;
-        }
 
-        // ============ SETUP PROGRESS BAR ============
-        function setupProgressBar(progressElement, progressBarElement) {
-            let isDragging = false;
-
-            // Mouse events
-            progressElement.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                globalDragging = true;
-                progressElement.classList.add('dragging', 'user-select-none');
-                seekTo(progressElement, e.clientX);
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging || !globalDragging) return;
-                seekTo(progressElement, e.clientX);
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (isDragging) {
-                    isDragging = false;
-                    globalDragging = false;
-                    progressElement.classList.remove('dragging');
-                }
-            });
-
-            // Touch events
-            progressElement.addEventListener('touchstart', (e) => {
-                isDragging = true;
-                globalDragging = true;
-                progressElement.classList.add('dragging', 'user-select-none');
-                seekTo(progressElement, e.touches[0].clientX);
-            });
-
-            document.addEventListener('touchmove', (e) => {
-                if (!isDragging || !globalDragging) return;
-                seekTo(progressElement, e.touches[0].clientX);
-            });
-
-            document.addEventListener('touchend', () => {
-                if (isDragging) {
-                    isDragging = false;
-                    globalDragging = false;
-                    progressElement.classList.remove('dragging');
-                }
-            });
-
-            // Click to seek
-            progressElement.addEventListener('click', (e) => {
-                seekTo(progressElement, e.clientX);
-            });
-        }
-
-        // ============ UPDATE PROGRESS BARS ============
-        function updateProgressBars() {
-            // Don't update if dragging, loading new song, or audio not ready
-            if (globalDragging || isLoadingSong) return;
-            
-            // Safety check: ensure audio has metadata loaded
-            if (!audio.duration || isNaN(audio.duration)) {
-                return;
-            }
-
-            const percent = (audio.currentTime / audio.duration) * 100;
-
-            // Update mini progress
-            document.getElementById('miniProgressBar').style.width = percent + '%';
-
-            // Update full progress
-            document.getElementById('fullProgressBar').style.width = percent + '%';
-            document.getElementById('currentTime').textContent = formatTime(audio.currentTime);
-            document.getElementById('totalTime').textContent = formatTime(audio.duration);
-        }
-
-        // ============ AUTO NEXT SONG ============
-        function checkSongEnd() {
-            if (audio.ended && currentSongIndex < songsPlaylist.length - 1) {
-                nextSong();
-            }
-        }
-
-        // ============ VOLUME CONTROL ============
-        document.getElementById('volumeSlider').addEventListener('input', (e) => {
-            audio.volume = e.target.value / 100;
-        });
-
-        // ============ AUDIO EVENT LISTENERS ============
-        audio.addEventListener('timeupdate', updateProgressBars);
-        audio.addEventListener('ended', checkSongEnd);
-        audio.addEventListener('play', updatePlayButtons);
-        audio.addEventListener('pause', updatePlayButtons);
-        audio.addEventListener('loadedmetadata', () => {
-            document.getElementById('totalTime').textContent = formatTime(audio.duration);
-        });
-
-        // ============ INITIALIZE PROGRESS BARS ============
-        setupProgressBar(
-            document.getElementById('miniProgress'),
-            document.getElementById('miniProgressBar')
-        );
-
-        setupProgressBar(
-            document.getElementById('fullProgress'),
-            document.getElementById('fullProgressBar')
-        );
-
-        // ============ MINI PLAYER CLICK TO EXPAND ============
-        document.getElementById('miniPlayer').addEventListener('click', (e) => {
-            if (!e.target.classList.contains('mini-player-btn') && 
-                !e.target.parentElement.classList.contains('mini-player-btn')) {
-                expandPlayer();
-            }
-        });
-    </script>
 </body>
 </html>
